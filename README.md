@@ -42,22 +42,22 @@ We wil proceed to declare more variables, whose names should be self-explainator
 ```solidity
 uint public reward = 0; // Stores reward in ETH
 
-  mapping(address => uint8) public playerChoices;
-  mapping(address => bool) public playerCommited;
-  mapping(address => bool) public playerRevealed;
-  mapping(address => bool) public playerInGame;
+mapping(address => uint8) public playerChoices;
+mapping(address => bool) public playerCommited;
+mapping(address => bool) public playerRevealed;
+mapping(address => bool) public playerInGame;
 
-  address public player0;
-  address public player1;
-  uint8 public numPlayers;
+address public player0;
+address public player1;
+uint8 public numPlayers;
 
-  CommitReveal public commitReveal;
-  TimeUnit public timeUnit;
-  uint256 _commitTime; // Time in seconds after which players can withdraw after the commit phase begins
-  uint256 _revealTime; // Time in seconds after which players can withdraw after the reveal phase begins
+CommitReveal public commitReveal;
+TimeUnit public timeUnit;
+uint256 _commitTime; // Time in seconds after which players can withdraw after the commit phase begins
+uint256 _revealTime; // Time in seconds after which players can withdraw after the reveal phase begins
 
-  uint8 public numCommits;
-  uint8 public numReveals;
+uint8 public numCommits;
+uint8 public numReveals;
 ```
 
 ### `addPlayer()`
