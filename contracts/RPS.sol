@@ -16,22 +16,22 @@ contract RPS {
   GamePhase public gamePhase;
 
   uint public reward = 0;
-  mapping(address => uint) public playerChoices;
+  mapping(address => uint8) public playerChoices;
   mapping(address => bool) public playerCommited;
   mapping(address => bool) public playerInGame;
 
   address public player0;
   address public player1;
-  uint public numPlayers;
+  uint8 public numPlayers;
 
   CommitReveal public commitReveal;
 
   TimeUnit public timeUnit;
-  uint public numCommits;
-  uint public numReveals;
+  uint8 public numCommits;
+  uint8 public numReveals;
 
-  uint256 _commitTime = 5;
-  uint256 _revealTime = 5;
+  uint256 constant _commitTime = 0;
+  uint256 constant _revealTime = 0;
 
   function _startGame() private {
     gamePhase = GamePhase.WAITING;
@@ -61,6 +61,10 @@ contract RPS {
   function addPlayer() public payable {
     require(!playerInGame[msg.sender], "Already joined");
     require(numPlayers < 2, "Too many players");
+    require(
+      gamePhase == GamePhase.WAITING,
+      "Cannot join when the game has started"
+    );
     require(msg.value == 1 ether, "Provide 1 ETH to play the game");
 
     reward += msg.value;
@@ -99,8 +103,12 @@ contract RPS {
   function reveal(bytes32 revealHash) public {
     require(playerInGame[msg.sender] == true, "Must be in game to reveal");
     require(numCommits == 2, "Requires two commits to reveal");
+
     commitReveal.reveal(msg.sender, revealHash);
-    playerChoices[msg.sender] = uint8(revealHash[31]);
+
+    uint8 choice = uint8(revealHash[31]);
+    require(choice < 5, "Invalid choice");
+    playerChoices[msg.sender] = choice;
     numReveals++;
 
     if (numReveals == 2) {
@@ -153,20 +161,43 @@ contract RPS {
     }
   }
 
+  enum GameResult {
+    WIN,
+    LOSE,
+    TIE
+  }
+
+  function _checkWin(
+    uint8 moveA,
+    uint8 moveB
+  ) private pure returns (GameResult) {
+    if (
+      (moveA == 0 && (moveB == 2 || moveB == 3)) || // Rock beats Scissors & Lizard
+      (moveA == 1 && (moveB == 0 || moveB == 4)) || // Paper beats Rock & Spock
+      (moveA == 2 && (moveB == 1 || moveB == 3)) || // Scissors beats Paper & Lizard
+      (moveA == 3 && (moveB == 1 || moveB == 4)) || // Lizard beats Paper & Spock
+      (moveA == 4 && (moveB == 0 || moveB == 2)) // Spock beats Rock & Scissors
+    ) {
+      return GameResult.WIN;
+    } else if (moveA == moveB) {
+      return GameResult.TIE;
+    } else {
+      return GameResult.LOSE;
+    }
+  }
+
   function _checkWinnerAndPay() private {
-    uint p0Choice = playerChoices[player0];
-    uint p1Choice = playerChoices[player1];
+    uint8 p0Choice = playerChoices[player0];
+    uint8 p1Choice = playerChoices[player1];
     address payable account0 = payable(player0);
     address payable account1 = payable(player1);
 
-    if ((p0Choice + 1) % 3 == p1Choice) {
-      // to pay player[1]
-      account1.transfer(reward);
-    } else if ((p1Choice + 1) % 3 == p0Choice) {
-      // to pay player[0]
+    GameResult result = _checkWin(p0Choice, p1Choice);
+    if (result == GameResult.WIN) {
       account0.transfer(reward);
+    } else if (result == GameResult.LOSE) {
+      account1.transfer(reward);
     } else {
-      // to split reward
       account0.transfer(reward / 2);
       account1.transfer(reward / 2);
     }

@@ -9,6 +9,8 @@ enum Choice {
   Rock,
   Paper,
   Scissors,
+  Lizard,
+  Spock,
 }
 
 function choiceEnumToString(choice: Choice) {
@@ -19,6 +21,10 @@ function choiceEnumToString(choice: Choice) {
       return "Paper";
     case Choice.Scissors:
       return "Scissors";
+    case Choice.Lizard:
+      return "Lizard";
+    case Choice.Spock:
+      return "Spock";
   }
 }
 
@@ -97,14 +103,8 @@ describe("RPS", function () {
     if (!silent) {
       console.log();
       console.log("Choices:");
-      console.log(
-        "Player 1 =",
-        choiceEnumToString(Number(await rps.playerChoices(player1)) as Choice)
-      );
-      console.log(
-        "Player 2 =",
-        choiceEnumToString(Number(await rps.playerChoices(player2)) as Choice)
-      );
+      console.log("Player 1 =", choiceEnumToString(choice1));
+      console.log("Player 2 =", choiceEnumToString(choice2));
       console.log();
     }
 
@@ -177,12 +177,38 @@ describe("RPS", function () {
 
   it("Should not have side effects", async function () {
     console.log();
-    await playAndExpectWin(Choice.Rock, Choice.Scissors);
-    await playAndExpectWin(Choice.Scissors, Choice.Paper);
-    await playAndExpectWin(Choice.Paper, Choice.Rock);
-    await playAndExpectLoss(Choice.Rock, Choice.Paper);
-    await playAndExpectLoss(Choice.Scissors, Choice.Rock);
-    await playAndExpectLoss(Choice.Paper, Choice.Scissors);
+
+    for (let i = 0; i < 5; i++) {
+      for (let j = 0; j < 5; j++) {
+        const { player1BalanceDifference, player2BalanceDifference } =
+          await play(i as Choice, j as Choice, true);
+
+        if (
+          Math.abs(
+            Number(player1BalanceDifference - player2BalanceDifference)
+          ) < parseEther("0.01")
+        ) {
+          console.log(
+            `${choiceEnumToString(i)} ties against ${choiceEnumToString(j)}`
+          );
+        } else if (player1BalanceDifference > player2BalanceDifference) {
+          console.log(
+            `${choiceEnumToString(i)} wins against ${choiceEnumToString(j)}`
+          );
+        } else if (player1BalanceDifference < player2BalanceDifference) {
+          console.log(
+            `${choiceEnumToString(i)} loses against ${choiceEnumToString(j)}`
+          );
+        }
+      }
+    }
+
+    // await playAndExpectWin(Choice.Rock, Choice.Scissors);
+    // await playAndExpectWin(Choice.Scissors, Choice.Paper);
+    // await playAndExpectWin(Choice.Paper, Choice.Rock);
+    // await playAndExpectLoss(Choice.Rock, Choice.Paper);
+    // await playAndExpectLoss(Choice.Scissors, Choice.Rock);
+    // await playAndExpectLoss(Choice.Paper, Choice.Scissors);
     console.log();
   });
 
@@ -204,7 +230,7 @@ describe("RPS", function () {
     ).to.be.revertedWith("Too many players");
   });
 
-  it("Commit should fail because not in game", async function () {
+  it("Should not let us reveal because not in game", async function () {
     await rps.connect(player1).addPlayer({ value: parseEther("1") });
     await rps.connect(player2).addPlayer({ value: parseEther("1") });
 
@@ -228,7 +254,7 @@ describe("RPS", function () {
     );
   });
 
-  it("Reveal fail because not in game", async function () {
+  it("Should not let us reveal because not in game", async function () {
     await rps.connect(player1).addPlayer({ value: parseEther("1") });
     await rps.connect(player2).addPlayer({ value: parseEther("1") });
 
@@ -284,6 +310,19 @@ describe("RPS", function () {
 
     return { player1Hash, player2Hash };
   }
+
+  it("Should not let us join a game after it has started", async function () {
+    const { player1Hash, player2Hash } = await withdrawDeadlineSetup();
+
+    await rps.connect(player1).commit(player1Hash);
+    await rps.connect(player2).commit(player2Hash);
+
+    await rps.connect(player1).withdraw();
+
+    await expect(
+      rps.connect(decoyPlayer).addPlayer({ value: parseEther("1") })
+    ).to.be.revertedWith("Cannot join when the game has started");
+  });
 
   // it("Should not let us withdraw before commit deadline", async function () {
   //   await withdrawDeadlineSetup();
