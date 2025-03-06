@@ -32,8 +32,8 @@ Here is a basic representation of the game's states:
        |                         v                             v                          |
        ------------------------- o <-------------------------- o <-------------------------
 ```
-The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 #### `addPlayer()`
+The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 ```solidity
 // Adds a player to the game
 // Players must provide 1 ETH to join the game
@@ -97,5 +97,95 @@ After that, we will increment the number of players by one.
 
 Finally, if there are now two players in the game, the game transitions from a `WAITING` to a `COMMIT` state. As explained earlier, this is the state in which players can commit their choices.
 
-#### HELLO
+#### `commit(bytes32 dataHash)`
+In the `COMMIT` state, the user can call `commit(dataHash)`, where `dataHash` is a 32-byte digest, hashed from a 32-byte value created using [this Python script](https://colab.research.google.com/drive/1cPqxOqzJ-brL05pd0WRAwwwK0Zzx-Rnl?usp=sharing). The script randomly generates a 31-byte-long string, which will be concatinated by the stringified choice encoding in hex (i.e. `Rock = 00`, `Paper = 01`, `Scissors = 02`, etc.). This represents the 32nd byte of the pre-hash choice value. Then, the value is then put through a `keccak256` hash function, which should be done externally (not within a blockchain).
+
+```solidity
+// User commits a choice (rock, paper, scissors, lizard, or spock, in integer form)
+// The choice is hashed inside commitReveal to prevent front-running
+// dataHash must be hashed externally (using kekcak256) before being fed to commit()
+function commit(bytes32 dataHash) public {
+    require(playerInGame[msg.sender] == true, "Must be in game to commit");
+    require(numPlayers == 2, "Requires at least two players in game to commit");
+    require(playerCommited[msg.sender] == false, "Already commited");
+    require(numCommits < 2, "Too many commits");
+    
+    // Can almost never revert
+    commitReveal.commit(msg.sender, dataHash);
+    
+    // ... more code ... //
+}
+```
+
+At the top of the method body, we can see multiple `require()` statements. These check if:
+* The sender is a player in the game
+* Two players are in the game
+* If the sender hasn't committed yet
+* If the commits are less than 2
+
+All checks must succeed in order to successfully commit.
+
+Next, we will call `commitReveal.commit(msg.sender, dataHash)`, which has the signature `CommitReveal::commit(address addr, bytes32 dataHash)`, with `addr` as the sender's address (`msg.sender`). The `commitReveal` contract will store the commit struct in a mapping at index `addr` as demonstrated by the code below. Additionally, it also emits the event `CommitHash`, but this, along with other events, will not be used.
+```solidity
+// contracts/CommitReveal.sol
+function commit(address addr, bytes32 dataHash) public {
+    commits[addr].commit = dataHash;
+    commits[addr].block = uint64(block.number);
+    commits[addr].revealed = false;
+    emit CommitHash(addr, commits[addr].commit, commits[addr].block);
+}
+```
+
+By storing the digest and not the raw choice, we effectively prevent cheaters from looking up their opponent's answer as the digest completely conceals the information, thus preventing **front-running**. 
+However, this raises a question: how can we recover the choice if it's concealed? We will answer this in the next section. For now, we will describe the rest of the `commit()` method first.
+
+```
+function commit(bytes32 dataHash) public {
+    // ... more code ... //
+    numCommits++;
+    playerCommited[msg.sender] = true;
+    
+    // Start the reveal phase after two players have committed
+    if (numCommits == 2) {
+      gamePhase = GamePhase.REVEAL;
+      timeUnit.setStartTime();
+    }
+}
+```
+
+After a successful commit, we will increment the current number of commits `commit` by one and remember that the player has committed by setting `playerCommitted[msg.sender]` to `true`. This prevents them from committing again.
+Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`.
+
+#### `reveal(bytes32 dataHash)`
+```solidity
+// contracts/RPS.sol
+
+// User reveals the choice they have committed to
+// A choice is accepted if they the hash matches the committed hash
+// revealHash is not hashed, but padded with 31 random bytes with the final one being the choice (1 byte)
+function reveal(bytes32 revealHash) public {
+    require(playerInGame[msg.sender] == true, "Must be in game to reveal");
+    require(playerRevealed[msg.sender] == false, "Already revealed");
+    require(numCommits == 2, "Requires two commits to reveal");
+    
+    // Reverts if the hash does not match the committed hash
+    commitReveal.reveal(msg.sender, revealHash);
+    
+    uint8 choice = uint8(revealHash[31]);
+    require(choice < 5, "Invalid choice");
+    playerChoices[msg.sender] = choice;
+    playerRevealed[msg.sender] = true;
+    numReveals++;
+    
+    // Pays the winner, ends and restarts the game after both players have revealed their choices
+    if (numReveals == 2) {
+      gamePhase = GamePhase.END;
+      _checkWinnerAndPay();
+      _startGame();
+    }
+}
+```
+
+
+
 
