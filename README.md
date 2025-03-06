@@ -79,7 +79,7 @@ constructor(uint256 commitTime, uint256 revealTime) {
 }
 ```
 
-### `_startGame()`
+### `RPS::_startGame()`
 This intializes the contract's state to their default values, providing a convenient way to reset a finished game.
 ```solidity
 // contracts/RPS.sol
@@ -109,7 +109,7 @@ function _startGame() private {
 }
 ```
 
-### `addPlayer()`
+### `RPS::addPlayer()`
 The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 ```solidity
 // contracts/RPS.sol
@@ -186,7 +186,7 @@ function setStartTime() public {
 ```
 This basically marks the current timestamp as the start time, which can be used to calculate elapsed time for our withdrawal mechanism which will be explained later.
 
-### `commit(bytes32 dataHash)`
+### `RPS::commit(bytes32 dataHash)`
 In the `COMMIT` state, the user can call `commit(dataHash)`, where `dataHash` is a 32-byte digest, hashed from a 32-byte value created using [this Python script](https://colab.research.google.com/drive/1cPqxOqzJ-brL05pd0WRAwwwK0Zzx-Rnl?usp=sharing). The script randomly generates a 31-byte-long string, which will be concatinated by the stringified choice encoding in hex (i.e. `Rock = 00`, `Paper = 01`, `Scissors = 02`, etc.). This represents the 32nd byte of the pre-hash choice value. Then, the value is then put through a `keccak256` hash function, which should be done externally (not within a blockchain).
 
 ```solidity
@@ -246,7 +246,7 @@ function commit(bytes32 dataHash) public {
 After a successful commit, we will increment the current number of commits `commit` by one and remember that the player has committed by setting `playerCommitted[msg.sender]` to `true`. This prevents them from committing again.
 Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`. Next, we mark the current timestamp as the start time for elapsed time calculations by using `timeUnit.setStartTime()`.
 
-### `reveal(bytes32 dataHash)`
+### `RPS::reveal(bytes32 dataHash)`
 Here we have `reveal(bytes32 revealHash)`. Despite its name, `revealHash` is not hashed, but rather the unhashed original choice value (see [here](#commitbytes32-datahash)). 
 Below is a representation of the relationship between these two parameters.
 ```
@@ -359,7 +359,7 @@ For us to get to this point, `commitReveal.reveal(...)` must not revert, that is
 
 After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`, which will be the next function we will get into. After that, [`_startGame()`](#_startgame) is called, which resets the game back to the default state.
 
-### `_checkWinnerAndPay()`
+### `RPS::_checkWinnerAndPay()`
 ```solidity
 // contracts/RPS.sol
 function _checkWinnerAndPay() private {
@@ -437,7 +437,7 @@ Basically, `result` represents the outcome from `player0`'s perspective.
 Therefore, `result == ChoiceOutcomes.WIN` represents `player0`'s victory. If it is a loss, then it is `player1`'s. Otherwise, it is a tie.
 In case of a decisive win or loss, the victor is rewarded 2 ETH, while the loser does not get their 1 ETH stake back. In case of a tie, each player is refunded 1 ETH.
 
-### `_withdraw()`
+### `RPS::_withdraw()`
 This is the final method in the contract, used by the players to withdraw after a certain time has passed. 
 This prevents players from getting their funds locked in the game due to the other player's refusal to make a move, whether to commit or to reveal, thus deadlocking the game.
 
