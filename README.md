@@ -67,7 +67,7 @@ uint8 public numReveals;
 Below this, there will be a lot of method declarations. We will walk through each of them one-by-one, including its dependencies.
 
 ### `constructor(uint256 commitTime, uint256 revealTime)`
-This constructor method allows the deployer to specify how long the commit and reveal times are. After this duration is over, they will be allowed to withdraw from the game with penalities in some cases.
+This constructor method allows the deployer to specify how long the commit and reveal times are. After this duration is over, the players will be allowed to withdraw from the game with penalities in some cases.
 This method sets the private variables `_commitTime` and `_revealTime` to the provided values `commitTime` and `revealTime`.
 ```solidity
 // contracts/RPS.sol
