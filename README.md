@@ -27,7 +27,7 @@ The game has three states defined by this enum `GamePhase`. We define a variable
 enum GamePhase {
     WAITING, // Waiting for players
     COMMIT, // Waiting for two players to commit
-    REVEAL, // Waiting for two players to reveal
+    REVEAL // Waiting for two players to reveal
 }
 
 GamePhase public gamePhase;
