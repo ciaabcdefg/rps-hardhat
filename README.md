@@ -26,10 +26,26 @@ GamePhase public gamePhase;
 ```
 The states above can be described by this basic state diagram.
 ```
-        2 players joined            2 players commited             2 players revealed
-WAITING -----------------> COMMIT ---------------------> REVEAL -----------------------
-  ^                          |  no players left            |  no players left         |
-  |                          v                             v                          |
-  -------------------------- o <-------------------------- o <-------------------------
-
+             2 players joined            2 players commited            2 players revealed
+--> WAITING -----------------> COMMIT ---------------------> REVEAL -----------------------
+       ^                         |  no players left            |  no players left         |
+       |                         v                             v                          |
+       ------------------------- o <-------------------------- o <-------------------------
 ```
+The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game.
+```solidity
+// Adds a player to the game
+// Players must provide 1 ETH to join the game
+// Only permitted players can join the game (refer to the 4-line require statement)
+function addPlayer() public payable {
+    require(!playerInGame[msg.sender], "Already joined");
+    require(numPlayers < 2, "Too many players");
+    require(
+      gamePhase == GamePhase.WAITING,
+      "Cannot join when the game has started"
+    );
+}
+```
+
+
+
