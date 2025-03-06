@@ -19,7 +19,6 @@ enum GamePhase {
     WAITING, // Waiting for players
     COMMIT, // Waiting for two players to commit
     REVEAL, // Waiting for two players to reveal
-    END // Game ended (probably unused)
   }
 
 GamePhase public gamePhase;
@@ -35,6 +34,7 @@ Here is a basic representation of the game's states:
 #### `addPlayer()`
 The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 ```solidity
+// contracts/RPS.sol
 // Adds a player to the game
 // Players must provide 1 ETH to join the game
 // Only permitted players can join the game (refer to the 4-line require statement)
@@ -68,6 +68,7 @@ All checks must succeed in order for a player to join a game.
 Now, let's take at the code below it.
 
 ```solidity
+// contracts/RPS.sol
 function addPlayer() public payable {
     // ... more code ... //
     reward += msg.value;
@@ -101,6 +102,7 @@ Finally, if there are now two players in the game, the game transitions from a `
 In the `COMMIT` state, the user can call `commit(dataHash)`, where `dataHash` is a 32-byte digest, hashed from a 32-byte value created using [this Python script](https://colab.research.google.com/drive/1cPqxOqzJ-brL05pd0WRAwwwK0Zzx-Rnl?usp=sharing). The script randomly generates a 31-byte-long string, which will be concatinated by the stringified choice encoding in hex (i.e. `Rock = 00`, `Paper = 01`, `Scissors = 02`, etc.). This represents the 32nd byte of the pre-hash choice value. Then, the value is then put through a `keccak256` hash function, which should be done externally (not within a blockchain).
 
 ```solidity
+// contracts/RPS.sol
 // User commits a choice (rock, paper, scissors, lizard, or spock, in integer form)
 // The choice is hashed inside commitReveal to prevent front-running
 // dataHash must be hashed externally (using kekcak256) before being fed to commit()
@@ -154,10 +156,25 @@ function commit(bytes32 dataHash) public {
 ```
 
 After a successful commit, we will increment the current number of commits `commit` by one and remember that the player has committed by setting `playerCommitted[msg.sender]` to `true`. This prevents them from committing again.
-Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`.
+Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`. Furthermore, we will call `timeUnit.setStartTime()` to start the reveal deadline.
+
+```solidity
+// contracts/TimeUnit.sol
+// setting the startTime variable
+function setStartTime() public {
+    startTime = block.timestamp;
+}
+```
+This basically marks the current timestamp as the start time, which can be used to calculate elapsed time.
 
 #### `reveal(bytes32 dataHash)`
-Here we have `reveal(bytes32 dataHash)`. Despite its name, `dataHash` is not hashed, but rather generated from a Python script (or any other script) that creates a string representing a 31-byte hex value. For more details, see [here](#commitbytes32-datahash).
+Here we have `reveal(bytes32 revealHash)`. Despite its name, `revealHash` is not hashed, but rather the unhashed original choice value (see [here](#commitbytes32-datahash)). 
+Below is a representation of the relationship between these two parameters.
+```
+revealHash ----> hash function ---> dataHash
+```
+We will use this method to reveal the committed answer by checking if the hash of the sender's choice that they claim to have committed matches with that of the stored commit. If it does, we accept that is actually the choice that they committed to. This way, we don't have to reverse the hash to find the recover the original choice (which is near impossible). Thus, we prevent front-running by not sacrificing the ability to recover the committed choice.
+
 ```solidity
 // contracts/RPS.sol
 // User reveals the choice they have committed to
@@ -170,7 +187,12 @@ function reveal(bytes32 revealHash) public {
     // ... more code ... //
 }
 ```
+We start the method with a series of `require()` checks. They check if:
+* The sender is a player in the game
+* The player has not revealed their answer
+* Require two commits to be made before revealing
 
+All checks must pass in order to reveal the answer.
 
 ```solidity
 // contracts/RPS.sol
@@ -178,7 +200,69 @@ function reveal(bytes32 revealHash) public {
     // ... more code ... //
     // Reverts if the hash does not match the committed hash
     commitReveal.reveal(msg.sender, revealHash);
-    
+    // ... more code ... //
+}
+```
+If the checks succeed, we will proceed to call `commitReveal.reveal(msg.sender, revealHash)`, whose signature is `CommitReveal::reveal(address addr, bytes32 revealHash)`. `addr` is the sender's address (`msg.sender`).
+Let's peek into `CommitReveal::reveal(...)` to see what it does.
+
+```solidity
+// contracts/CommitReveal.sol
+// ciaabcdefg: Modified the reveal function to accept addr as well
+// addr is used instead of msg.sender (msg.sender refers to the contract address, not the player)
+function reveal(address addr, bytes32 revealHash) public {
+    // make sure it hasn't been revealed yet
+    require(
+      commits[addr].revealed == false,
+      "CommitReveal::reveal: Already revealed"
+    );
+    // require that they can produce the committed hash
+    require(
+      getHash(revealHash) == commits[addr].commit,
+      "CommitReveal::reveal: Revealed hash does not match commit"
+    );
+    // require that the block number is greater than the original block
+    require(
+      uint64(block.number) > commits[addr].block,
+      "CommitReveal::reveal: Reveal and commit happened on the same block"
+    );
+    // require that no more than 250 blocks have passed
+    require(
+      uint64(block.number) <= commits[addr].block + 250,
+      "CommitReveal::reveal: Revealed too late"
+    );
+    // ... more code ... //
+}
+```
+Above is a series of `require()` statements that check if:
+* The commit hasn't been revealed
+* The produced hash of `revealHash` is identical to the commit's
+* Reveal and commit did not happen on the same block (cannot commit then reveal immediately)
+* No more than 250 blocks have passed since the commit
+
+Altogether, this prevents a player from withholding their choice for too long. Furthermore, enforcing reveals to happen in the future after commits to prevent them from exploiting instant commit-reveal mechanics.
+
+```solidity
+// contracts/CommitReveal.sol
+function reveal(address addr, bytes32 revealHash) public {
+    // ... more code ... // 
+    // set to revealed    
+    commits[addr].revealed = true;
+    // get the hash of the block that happened after they committed
+    bytes32 blockHash = blockhash(commits[addr].block);
+    // hash that with their reveal that so miner shouldn't know and mod it with some max number you want
+    uint random = uint(keccak256(abi.encodePacked(blockHash, revealHash))) %
+      max;
+    emit RevealHash(addr, revealHash, random);
+}
+```
+
+If the checks pass, we will mark the commit as revealed to prevent it from being revealed again. Next, we will emit `RevealHash(addr, revealHash, random)` with `random` being the hash of the commit blockhash through a modulo of `max`. This part is irrelevant to the main game logic, but it introduces unpredictable randomness that prevents players from predicting outcomes.
+
+Let's hop back to `reveal(...)` in `contracts/RPS.sol`.
+```
+function reveal(address addr, bytes32 revealHash) public {
+    // ... more code ... //
     uint8 choice = uint8(revealHash[31]);
     require(choice < 5, "Invalid choice");
     playerChoices[msg.sender] = choice;
@@ -191,6 +275,6 @@ function reveal(bytes32 revealHash) public {
       _checkWinnerAndPay();
       _startGame();
     }
+}
 ```
-
-
+For us to get to this point, `commitReveal.reveal(...)` must not revert, that is the player's answer must be deemed acceptable before proceeding. Because we can trust the player's claims that they made this choice, we can extract the 32nd byte of `revealHash` to get the answer. We apply a type cast to the byte to transform it to a number from `0x00` (Rock) and `0x04` (Spock), then we record the choice. 
