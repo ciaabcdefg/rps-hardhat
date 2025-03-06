@@ -14,6 +14,7 @@ This is my submission for Centralized and Decentralized Finance class of 2024 (2
 ## How It Works
 `RPS.sol` depends on two contracts, namely `CommitReveal.sol` and `TimeUnit.sol`.
 ```solidity
+// contracts/RPS.sol
 import "contracts/CommitReveal.sol";
 import "contracts/TimeUnit.sol";
 ```
@@ -40,6 +41,7 @@ Here is a basic representation of the game's states:
 
 We wil proceed to declare more variables, whose names should be self-explainatory or described by the accompanying comments.
 ```solidity
+// contracts/RPS.sol
 uint public reward = 0; // Stores reward in ETH
 
 mapping(address => uint8) public playerChoices;
@@ -66,6 +68,7 @@ Below this, there will be a lot of method declarations. We will walk through eac
 This constructor method allows the deployer to specify how long the commit and reveal times are. After this duration is over, they will be allowed to withdraw from the game with penalities in some cases.
 This method sets the private variables `_commitTime` and `_revealTime` to the provided values `commitTime` and `revealTime`.
 ```solidity
+// contracts/RPS.sol
 // Provide the duration in seconds for the commit and reveal phases
 constructor(uint256 commitTime, uint256 revealTime) {
     _commitTime = commitTime;
@@ -76,7 +79,8 @@ constructor(uint256 commitTime, uint256 revealTime) {
 
 ### `_startGame()`
 This intializes the contract's state to their default values, providing a convenient way to reset a finished game.
-```
+```solidity
+// contracts/RPS.sol
 // Starts a new game
 function _startGame() private {
     gamePhase = GamePhase.WAITING;
@@ -432,7 +436,127 @@ Therefore, `result == ChoiceOutcomes.WIN` represents `player0`'s victory. If it 
 In case of a decisive win or loss, the victor is rewarded 2 ETH, while the loser does not get their 1 ETH stake back. In case of a tie, each player is refunded 1 ETH.
 
 ### `_withdraw()`
-This is the final method in the contract, used by the players to withdraw after a certain time has passed.
+This is the final method in the contract, used by the players to withdraw after a certain time has passed. 
+This prevents players from getting their funds locked in the game due to the other player's refusal to make a move, whether to commit or to reveal, thus deadlocking the game.
 
+```solidity
+// contracts/RPS.sol
+// Allows players to withdraw mid-game, but under certain conditions
+// Players can withdraw after the commit and reveal deadlines, with respect to the game phase in which they withdraw
+// If a player withdraws after the other player has revealed their choice, the remaining player wins
+function withdraw() public {
+    require(
+      playerInGame[msg.sender] == true,
+      "Cannot withdraw if you are not in the game"
+    );
+    // ... more code ... //
+}
+```
+The method starts with a single `require()` statement that checks if the sender is in the game. If they aren't, they cannot withdraw from the game, obviously.
 
+```solidity
+// contracts/RPS.sol
+function withdraw() public {
+    // ... more code ... //
+    // Deadline check
+    if (gamePhase == GamePhase.COMMIT) {
+      require(
+        timeUnit.elapsedSeconds() >= _commitTime,
+        "Cannot withdraw before commit deadline"
+      );
+    } else if (gamePhase == GamePhase.REVEAL) {
+      require(
+        timeUnit.elapsedSeconds() >= _revealTime,
+        "Cannot withdraw before reveal deadline"
+      );
+    }
+    // ... more code ... //
+}
+```
+We have an if-else statement that if depending on the state, contain `require()` a statement that checks if the elapsed time in seconds is greater or equal to the commit or reveal deadline times `_commitTime` and `_revealTime` respectively.
+After this duration, the game will allow withdrawals.
 
+```solidity
+// contracts/RPS.sol
+function withdraw() public {
+    // ... more code ... //
+    playerInGame[msg.sender] = false;
+    playerChoices[msg.sender] = 0;
+    numPlayers--;
+
+    address remainingPlayer; // The other person who hasn't withdrawn
+
+    // If the withdrawing player is player0, player1 is the remaining player and vice versa
+    if (msg.sender == player0) {
+      player0 = address(0);
+      remainingPlayer = player1;
+    } else if (msg.sender == player1) {
+      player1 = address(0);
+      remainingPlayer = player0;
+    }
+    // ... more code ... //
+}
+```
+If withdrawal is permitted, the game loses a player. The player is marked to be out of the game, `numPlayer` is deducted by one and their choice is reset.
+Next, we will declare a variable that stores the remaining player who hasn't withdrawn yet `remainingPlayer`, that is the player whose address is not equal to the sender's address `msg.sender`.
+Then, an if-else statement will set the `remainingPlayer` using the aforementioned logic, and we also set `player0` or `player1` to the null address `address(0)` depending whose address is equal to the sender.
+
+```solidity
+// contracts/RPS.sol
+function withdraw() public {
+    // ... more code ... //
+    if (playerCommited[msg.sender]) {
+      playerCommited[msg.sender] = false;
+      numCommits--;
+    }
+
+    if (playerRevealed[msg.sender]) {
+      playerRevealed[msg.sender] = false;
+      numReveals--;
+    }
+    // ... more code ... //
+}
+```
+Following that, we will deduct the number of commits or reveals by one, depending on whether if they have made a commit or a reveal or not.
+
+```solidity
+// contracts/RPS.sol
+function withdraw() public {
+    // ... more code ... //
+    if (gamePhase == GamePhase.REVEAL && numReveals == 1) {
+      // If the player withdraws after the other player has revealed their answer,
+      // they lose their share of the stake and the remaining player automatically wins
+      address payable account = payable(remainingPlayer);
+      account.transfer(reward); // The remaining player automatically wins 2 ETH (1 from the withdrawing player and 1 from themselves)
+      _startGame(); // Reset the game!
+      return;
+    } else {
+      // Otherwise, the withdrawing player gets their money back
+      reward -= 1 ether;
+      address payable account = payable(msg.sender);
+      account.transfer(1 ether);
+    }
+    // ... more code ... //
+}
+```
+However, in the reveal phase, if somebody has already revealed their choice, the other player might be able to see it via the transaction pool. 
+If they see that the other's choice beats theirs, they can do nothing but accept their defeat as soon as they reveal theirs, as they cannot change their answer.
+They can also try withholding their reveal forever, but they will also not get their stake back. 
+Or, they can withdraw to get this over with, which will result in a tie (the other player is forced to withdraw as the game can never progress with only one player). 
+
+To prevent this, we will make a rule so that if somebody has revealed their choice, a withdraw results in an immediate loss for the withdrawer.
+The only player who has revealed their answer immediately wins a reward of 2 ETH.
+
+This if-else statement makes sure that a withdraw cannot affect the future victor.
+
+```solidity
+// contracts/RPS.sol
+function withdraw() public {
+    // ... more code ... //
+    // If there are no players left, the game is reset
+    if (numPlayers == 0) {
+      _startGame();
+    }
+}
+```
+Finally, if all players have withdrawn, the game is reset by calling `_startGame()`.
