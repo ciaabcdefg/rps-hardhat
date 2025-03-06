@@ -4,10 +4,11 @@ This is Ittiwat Chuchoet's (อิทธิวัฒน์ ชูเชิด) s
 
 ## Included in the Repo
 ### `/contracts`
-From Paruj Ratanaworabhan's ([`parujr`](https://github.com/parujr)) [repository](https://github.com/parujr/RPS)
-* `RPS.sol` - the contract containing the Rock, Paper, Scissors, Lizard, Spock game. Modified by me ([`ciaabcdefg`](https://github.com/ciaabcdefg)).
+From Paruj Ratanaworabhan's (`parujr`) [repository](https://github.com/parujr/RPS)
+* `RPS.sol` - the contract containing the Rock, Paper, Scissors, Lizard, Spock game. Modified by me.
 * `TimeUnit.sol` - the contract containing TimeUnit (records timestamps). Unmodified from source.
-* `CommitReveal.sol` - the contract containing CommitReveal (used to prevent front-running). Probably from Austin Griffith's (`austintgriffith`) [`repository`](https://github.com/austintgriffith/commit-reveal), modified by me ([`ciaabcdefg`](https://github.com/ciaabcdefg)).
+* `CommitReveal.sol` - the contract containing CommitReveal (used to prevent front-running). Probably from Austin Griffith's (`austintgriffith`) [`repository`](https://github.com/austintgriffith/commit-reveal), modified by me.
+* 
 ### `/test`
 * `RPS.ts` — test file for `RPS.sol`, will not work unless player restriction logic in `addPlayer()` in `RPS.sol` is removed.
 * For grading, you can ignore `/test` along with other files in the root directory.
