@@ -47,7 +47,7 @@ describe("RPS", function () {
   beforeEach(async function () {
     const RPSFactory = await ethers.getContractFactory("RPS");
     [owner, player1, player2, decoyPlayer] = await ethers.getSigners();
-    rps = (await RPSFactory.deploy()) as RPS;
+    rps = (await RPSFactory.deploy(0, 0)) as RPS;
 
     await rps.waitForDeployment();
 
@@ -290,7 +290,7 @@ describe("RPS", function () {
     );
   });
 
-  async function withdrawDeadlineSetup() {
+  async function beforeCommitSetup() {
     await rps.connect(player1).addPlayer({ value: parseEther("1") });
     await rps.connect(player2).addPlayer({ value: parseEther("1") });
 
@@ -308,11 +308,11 @@ describe("RPS", function () {
       .padStart(2, "0")}`;
     const player2Hash = hashData(player2Data);
 
-    return { player1Hash, player2Hash };
+    return { player1Hash, player2Hash, player1Data, player2Data };
   }
 
   it("Should not let us join a game after it has started", async function () {
-    const { player1Hash, player2Hash } = await withdrawDeadlineSetup();
+    const { player1Hash, player2Hash } = await beforeCommitSetup();
 
     await rps.connect(player1).commit(player1Hash);
     await rps.connect(player2).commit(player2Hash);
@@ -322,6 +322,45 @@ describe("RPS", function () {
     await expect(
       rps.connect(decoyPlayer).addPlayer({ value: parseEther("1") })
     ).to.be.revertedWith("Cannot join when the game has started");
+  });
+
+  it("Should let the revealed player win if someone withdraws", async function () {
+    const player1InitialBalance = await ethers.provider.getBalance(player1);
+    const player2InitialBalance = await ethers.provider.getBalance(player2);
+
+    const { player1Hash, player2Hash, player1Data, player2Data } =
+      await beforeCommitSetup();
+
+    await rps.connect(player1).commit(player1Hash);
+    await rps.connect(player2).commit(player2Hash);
+
+    await rps.connect(player1).reveal(player1Data);
+    await rps.connect(player2).withdraw();
+    // await rps.connect(player2).reveal(player2Data);
+
+    const player1Balance = await ethers.provider.getBalance(player1);
+    const player2Balance = await ethers.provider.getBalance(player2);
+
+    const player1BalanceDifference = player1Balance - player1InitialBalance;
+    const player2BalanceDifference = player2Balance - player2InitialBalance;
+
+    console.log();
+    console.log("Changes in Balance:");
+    console.log("Player 1 =", ethers.formatEther(player1BalanceDifference));
+    console.log("Player 2 =", ethers.formatEther(player2BalanceDifference));
+    console.log();
+
+    expect(await rps.gamePhase()).to.be.equal(0);
+    expect(player1BalanceDifference).to.be.approximately(
+      parseEther("1"),
+      parseEther("0.1")
+    );
+    expect(player2BalanceDifference).to.be.approximately(
+      parseEther("-1"),
+      parseEther("0.1")
+    );
+
+    // expect();
   });
 
   // it("Should not let us withdraw before commit deadline", async function () {

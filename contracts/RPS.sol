@@ -18,6 +18,7 @@ contract RPS {
   uint public reward = 0;
   mapping(address => uint8) public playerChoices;
   mapping(address => bool) public playerCommited;
+  mapping(address => bool) public playerRevealed;
   mapping(address => bool) public playerInGame;
 
   address public player0;
@@ -30,8 +31,8 @@ contract RPS {
   uint8 public numCommits;
   uint8 public numReveals;
 
-  uint256 constant _commitTime = 5;
-  uint256 constant _revealTime = 5;
+  uint256 _commitTime;
+  uint256 _revealTime;
 
   function _startGame() private {
     gamePhase = GamePhase.WAITING;
@@ -39,10 +40,13 @@ contract RPS {
     reward = 0;
     playerChoices[player0] = 0;
     playerChoices[player1] = 0;
+
     delete playerCommited[player0];
     delete playerCommited[player1];
-    playerInGame[player0] = false;
-    playerInGame[player1] = false;
+    delete playerInGame[player0];
+    delete playerInGame[player1];
+    delete playerRevealed[player0];
+    delete playerRevealed[player1];
 
     player0 = address(0);
     player1 = address(0);
@@ -54,7 +58,9 @@ contract RPS {
     numReveals = 0;
   }
 
-  constructor() {
+  constructor(uint256 commitTime, uint256 revealTime) {
+    _commitTime = commitTime;
+    _revealTime = revealTime;
     _startGame();
   }
 
@@ -109,6 +115,7 @@ contract RPS {
 
   function reveal(bytes32 revealHash) public {
     require(playerInGame[msg.sender] == true, "Must be in game to reveal");
+    require(playerRevealed[msg.sender] == false, "Already revealed");
     require(numCommits == 2, "Requires two commits to reveal");
 
     commitReveal.reveal(msg.sender, revealHash);
@@ -116,6 +123,7 @@ contract RPS {
     uint8 choice = uint8(revealHash[31]);
     require(choice < 5, "Invalid choice");
     playerChoices[msg.sender] = choice;
+    playerRevealed[msg.sender] = true;
     numReveals++;
 
     if (numReveals == 2) {
@@ -144,15 +152,18 @@ contract RPS {
     }
     require(gamePhase != GamePhase.END, "Cannot withdraw after game ends");
 
-    reward -= 1 ether;
     playerInGame[msg.sender] = false;
     playerChoices[msg.sender] = 0;
     numPlayers--;
 
+    address remainingPlayer;
+
     if (msg.sender == player0) {
       player0 = address(0);
+      remainingPlayer = player1;
     } else if (msg.sender == player1) {
       player1 = address(0);
+      remainingPlayer = player0;
     }
 
     if (playerCommited[msg.sender]) {
@@ -160,8 +171,24 @@ contract RPS {
       numCommits--;
     }
 
-    address payable account = payable(msg.sender);
-    account.transfer(1 ether);
+    if (playerRevealed[msg.sender]) {
+      playerRevealed[msg.sender] = false;
+      numReveals--;
+    }
+
+    if (gamePhase == GamePhase.REVEAL && numReveals == 1) {
+      // If the player withdraws after the other player has revealed their answer,
+      // they lose their share of the stake and the remaining player automatically wins
+      address payable account = payable(remainingPlayer);
+      account.transfer(reward); // The remaining player automatically wins 2 ETH (1 from the withdrawing player and 1 from themselves)
+      _startGame(); // Reset the game!
+      return;
+    } else {
+      // Otherwise, the withdrawing player gets their money back
+      reward -= 1 ether;
+      address payable account = payable(msg.sender);
+      account.transfer(1 ether);
+    }
 
     if (numPlayers == 0) {
       _startGame();
