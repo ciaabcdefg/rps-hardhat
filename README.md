@@ -279,7 +279,7 @@ function reveal(address addr, bytes32 revealHash) public {
 ```
 For us to get to this point, `commitReveal.reveal(...)` must not revert, that is the player's answer must be deemed acceptable before proceeding. Because we can trust the player's claims that they made this choice, we can extract the 32nd byte of `revealHash` to get the answer. We apply a type cast to the byte to transform it to a number from `0x00` (Rock) and `0x04` (Spock), then we record the choice in a mapping `playerChoice` at address `msg.sender`. Next, we will remember that this player has revealed their commit, and thus cannot reveal again. 
 
-After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`. Let's dive into the method.
+After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`, which will be the next function we will get into. After that, `_startGame()` is called, which resets the game back to the default state.
 
 ### `_checkWinnerAndPay()`
 ```solidity
@@ -296,7 +296,7 @@ function _checkWinnerAndPay() private {
 ```
 
 This method is called when the game finishes (after two reveals have been made). 
-We simply extract the choice from the `playerChoices` mapping and run through a helper method named `_checkOutcome(p0Choice, p1Choice)`, whose signature is `RPS::_checkOutcome(uint8 moveA, uint8 moveB) returns (ChoiceOutcome)`. It returns a `ChoiceOutcome` enum, which can either be a win, a loss or a tie.
+We simply extract the choice from the `playerChoices` mapping and run through a helper method named `_checkOutcome(p0Choice, p1Choice)`, whose signature is `RPS::_checkOutcome(uint8 moveA, uint8 moveB) returns (ChoiceOutcome)`. It returns a `ChoiceOutcome` enum, which can either be a win, a loss or a tie. The result is stored in a ChoiceOutcomes enum `result`.
 `_checkOutcome(...)` is a pure function, meaning that it performs no state mutation. Here's what `_checkOutcome()` and `ChoiceOutcome` look like:
 
 ```solidity
@@ -335,9 +335,12 @@ I find it hard to implement Rock, Paper, Scissors, Lizard and Spock using modulo
 The code is as straightforward as it looks. For example, if moveA is Rock (0), and moveB is Scissors (2) or Lizard (3), moveA wins against moveB, etc. 
 If moveA is equal to moveB, then it is a tie. Otherwise, moveA loses against moveB.
 
+With the ins and outs of `_checkOutcome(...)` explained, we will be back to `_checkWinnerAndPay()`.
+
 ```solidity
 function _checkWinnerAndPay() private {
     // ... more code ... //
+    ChoiceOutcomes result = _checkOutcome(p0Choice, p1Choice);
     if (result == ChoiceOutcomes.WIN) {
       // Account 0 wins the reward
       account0.transfer(reward);
@@ -351,3 +354,9 @@ function _checkWinnerAndPay() private {
     }
 }
 ```
+
+Basically, `result` represents the outcome from `player0`'s perspective. 
+Therefore, `result == ChoiceOutcomes.WIN` represents `player0`'s victory. If it is a loss, then it is `player1`'s. Otherwise, it is a tie.
+In case of a decisive win or loss, the victor is rewarded 2 ETH, while the loser does not get their 1 ETH stake back. In case of a tie, each player is refunded 1 ETH.
+
+
