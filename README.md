@@ -351,7 +351,7 @@ function reveal(address addr, bytes32 revealHash) public {
 ```
 For us to get to this point, `commitReveal.reveal(...)` must not revert, that is the player's answer must be deemed acceptable before proceeding. Because we can trust the player's claims that they made this choice, we can extract the 32nd byte of `revealHash` to get the answer. We apply a type cast to the byte to transform it to a number from `0x00` (Rock) and `0x04` (Spock), then we record the choice in a mapping `playerChoice` at address `msg.sender`. Next, we will remember that this player has revealed their commit, and thus cannot reveal again. 
 
-After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`, which will be the next function we will get into. After that, `_startGame()` is called, which resets the game back to the default state.
+After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`, which will be the next function we will get into. After that, [`_startGame()`](_startGame) is called, which resets the game back to the default state.
 
 ### `_checkWinnerAndPay()`
 ```solidity
