@@ -60,6 +60,49 @@ uint8 public numCommits;
 uint8 public numReveals;
 ```
 
+Below this, there will be a lot of method declarations. We will walk through each of them one-by-one, including its dependencies.
+
+### `constructor(uint256 commitTime, uint256 revealTime)`
+This constructor method allows the deployer to specify how long the commit and reveal times are. After this duration is over, they will be allowed to withdraw from the game with penalities in some cases.
+This method sets the private variables `_commitTime` and `_revealTime` to the provided values `commitTime` and `revealTime`.
+```solidity
+// Provide the duration in seconds for the commit and reveal phases
+constructor(uint256 commitTime, uint256 revealTime) {
+    _commitTime = commitTime;
+    _revealTime = revealTime;
+    _startGame();
+}
+```
+
+### `_startGame()`
+This intializes the contract's state to their default values, providing a convenient way to reset a finished game.
+```
+// Starts a new game
+function _startGame() private {
+    gamePhase = GamePhase.WAITING;
+    
+    reward = 0;
+    playerChoices[player0] = 0;
+    playerChoices[player1] = 0;
+    
+    delete playerCommited[player0];
+    delete playerCommited[player1];
+    delete playerInGame[player0];
+    delete playerInGame[player1];
+    delete playerRevealed[player0];
+    delete playerRevealed[player1];
+    
+    player0 = address(0);
+    player1 = address(0);
+    numPlayers = 0;
+    
+    commitReveal = new CommitReveal();
+    timeUnit = new TimeUnit();
+    numCommits = 0;
+    numReveals = 0;
+}
+```
+
 ### `addPlayer()`
 The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 ```solidity
@@ -387,5 +430,9 @@ function _checkWinnerAndPay() private {
 Basically, `result` represents the outcome from `player0`'s perspective. 
 Therefore, `result == ChoiceOutcomes.WIN` represents `player0`'s victory. If it is a loss, then it is `player1`'s. Otherwise, it is a tie.
 In case of a decisive win or loss, the victor is rewarded 2 ETH, while the loser does not get their 1 ETH stake back. In case of a tie, each player is refunded 1 ETH.
+
+### `_withdraw()`
+This is the final method in the contract, used by the players to withdraw after a certain time has passed.
+
 
 
