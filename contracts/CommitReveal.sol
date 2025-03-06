@@ -13,6 +13,8 @@ contract CommitReveal {
 
   mapping(address => Commit) public commits;
 
+  // ciaabcdefg: Modified the reveal function to accept addr as well
+  // addr is used instead of msg.sender (msg.sender refers to the contract address, not the player)
   function commit(address addr, bytes32 dataHash) public {
     commits[addr].commit = dataHash;
     commits[addr].block = uint64(block.number);
@@ -22,6 +24,8 @@ contract CommitReveal {
 
   event CommitHash(address sender, bytes32 dataHash, uint64 block);
 
+  // ciaabcdefg: Modified the reveal function to accept addr as well
+  // addr is used instead of msg.sender (msg.sender refers to the contract address, not the player)
   function reveal(address addr, bytes32 revealHash) public {
     //make sure it hasn't been revealed yet and set it to revealed
     require(
