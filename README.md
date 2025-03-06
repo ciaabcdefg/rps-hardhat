@@ -91,12 +91,22 @@ function addPlayer() public payable {
 ```
 
 If successful, `reward` will be incremented by the amount of ETH sent by the sender (1 ether), which will eventually be rewarded to the winner of the game by the end of the game.
-Next, we set `playerInGame[msg.sender] = true;` to prevent the player from joining twice, thus preventing them from infinitely joining to increase the reward.
+Next, we set `playerInGame[msg.sender] = true;` to prevent the player from joining twice, thus preventing them from infinitely joining to increase the reward. 
 
 Then, the address of the sender will be assigned to either `player0` or `player1`, depending on which one is vacant (`address(0)`).
 After that, we will increment the number of players by one.
 
-Finally, if there are now two players in the game, the game transitions from a `WAITING` to a `COMMIT` state. As explained earlier, this is the state in which players can commit their choices.
+Finally that, if there are now two players in the game, the game transitions from a `WAITING` to a `COMMIT` state. 
+As explained earlier, this is the state in which players can commit their choices. Then, we will call `timeUnit.setStartTime()` to start the reveal deadline.
+
+```solidity
+// contracts/TimeUnit.sol
+// setting the startTime variable
+function setStartTime() public {
+    startTime = block.timestamp;
+}
+```
+This basically marks the current timestamp as the start time, which can be used to calculate elapsed time for our withdrawal mechanism which will be explained later.
 
 #### `commit(bytes32 dataHash)`
 In the `COMMIT` state, the user can call `commit(dataHash)`, where `dataHash` is a 32-byte digest, hashed from a 32-byte value created using [this Python script](https://colab.research.google.com/drive/1cPqxOqzJ-brL05pd0WRAwwwK0Zzx-Rnl?usp=sharing). The script randomly generates a 31-byte-long string, which will be concatinated by the stringified choice encoding in hex (i.e. `Rock = 00`, `Paper = 01`, `Scissors = 02`, etc.). This represents the 32nd byte of the pre-hash choice value. Then, the value is then put through a `keccak256` hash function, which should be done externally (not within a blockchain).
@@ -156,16 +166,7 @@ function commit(bytes32 dataHash) public {
 ```
 
 After a successful commit, we will increment the current number of commits `commit` by one and remember that the player has committed by setting `playerCommitted[msg.sender]` to `true`. This prevents them from committing again.
-Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`. Furthermore, we will call `timeUnit.setStartTime()` to start the reveal deadline.
-
-```solidity
-// contracts/TimeUnit.sol
-// setting the startTime variable
-function setStartTime() public {
-    startTime = block.timestamp;
-}
-```
-This basically marks the current timestamp as the start time, which can be used to calculate elapsed time.
+Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`. Next, we mark the current timestamp as the start time for elapsed time calculations by using `timeUnit.setStartTime()`.
 
 #### `reveal(bytes32 dataHash)`
 Here we have `reveal(bytes32 revealHash)`. Despite its name, `revealHash` is not hashed, but rather the unhashed original choice value (see [here](#commitbytes32-datahash)). 
@@ -271,10 +272,82 @@ function reveal(address addr, bytes32 revealHash) public {
     
     // Pays the winner, ends and restarts the game after both players have revealed their choices
     if (numReveals == 2) {
-      gamePhase = GamePhase.END;
       _checkWinnerAndPay();
       _startGame();
     }
 }
 ```
-For us to get to this point, `commitReveal.reveal(...)` must not revert, that is the player's answer must be deemed acceptable before proceeding. Because we can trust the player's claims that they made this choice, we can extract the 32nd byte of `revealHash` to get the answer. We apply a type cast to the byte to transform it to a number from `0x00` (Rock) and `0x04` (Spock), then we record the choice. 
+For us to get to this point, `commitReveal.reveal(...)` must not revert, that is the player's answer must be deemed acceptable before proceeding. Because we can trust the player's claims that they made this choice, we can extract the 32nd byte of `revealHash` to get the answer. We apply a type cast to the byte to transform it to a number from `0x00` (Rock) and `0x04` (Spock), then we record the choice in a mapping `playerChoice` at address `msg.sender`. Next, we will remember that this player has revealed their commit, and thus cannot reveal again. 
+
+After two reveals, the game checks for the winner and pays them the reward accordingly by calling `_checkWinnerAndPay()`. Let's dive into the method.
+
+#### `_checkWinnerAndPay()`
+```solidity
+// contracts/RPS.sol
+function _checkWinnerAndPay() private {
+    uint8 p0Choice = playerChoices[player0];
+    uint8 p1Choice = playerChoices[player1];
+    address payable account0 = payable(player0);
+    address payable account1 = payable(player1);
+    
+    ChoiceOutcomes result = _checkOutcome(p0Choice, p1Choice);
+    // ... more code ... //
+}
+```
+
+This method is called when the game finishes (after two reveals have been made). 
+We simply extract the choice from the `playerChoices` mapping and run through a helper method named `_checkOutcome(p0Choice, p1Choice)`, whose signature is `RPS::_checkOutcome(uint8 moveA, uint8 moveB) returns (ChoiceOutcome)`. It returns a `ChoiceOutcome` enum, which can either be a win, a loss or a tie.
+`_checkOutcome(...)` is a pure function, meaning that it performs no state mutation. Here's what `_checkOutcome()` and `ChoiceOutcome` look like:
+
+```solidity
+// contracts/RPS.sol
+
+// Outcomes of the Rock, Paper, Scissors, Lizard, Spock game
+enum ChoiceOutcomes {
+    WIN,
+    LOSE,
+    TIE
+}
+
+// Checks for the outcome of moveA against moveB
+// Returns WIN if moveA wins, LOSE if moveA loses, and TIE if they tie
+function _checkOutcome(
+    uint8 moveA,
+    uint8 moveB
+    ) private pure returns (ChoiceOutcomes) {
+    if (
+      (moveA == 0 && (moveB == 2 || moveB == 3)) || // Rock beats Scissors & Lizard
+      (moveA == 1 && (moveB == 0 || moveB == 4)) || // Paper beats Rock & Spock
+      (moveA == 2 && (moveB == 1 || moveB == 3)) || // Scissors beats Paper & Lizard
+      (moveA == 3 && (moveB == 1 || moveB == 4)) || // Lizard beats Paper & Spock
+      (moveA == 4 && (moveB == 0 || moveB == 2)) // Spock beats Rock & Scissors
+    ) {
+      return ChoiceOutcomes.WIN;
+    } else if (moveA == moveB) {
+      return ChoiceOutcomes.TIE;
+    } else {
+      return ChoiceOutcomes.LOSE;
+    }
+}
+```
+
+I find it hard to implement Rock, Paper, Scissors, Lizard and Spock using modulo operations, so I opted in to using simple if-else statements instead. 
+The code is as straightforward as it looks. For example, if moveA is Rock (0), and moveB is Scissors (2) or Lizard (3), moveA wins against moveB, etc. 
+If moveA is equal to moveB, then it is a tie. Otherwise, moveA loses against moveB.
+
+```solidity
+function _checkWinnerAndPay() private {
+    // ... more code ... //
+    if (result == ChoiceOutcomes.WIN) {
+      // Account 0 wins the reward
+      account0.transfer(reward);
+    } else if (result == ChoiceOutcomes.LOSE) {
+      // Account 1 wins the reward
+      account1.transfer(reward);
+    } else {
+      // Tie: split the reward in half
+      account0.transfer(reward / 2);
+      account1.transfer(reward / 2);
+    }
+}
+```
