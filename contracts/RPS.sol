@@ -7,15 +7,16 @@ import "contracts/TimeUnit.sol";
 
 contract RPS {
   enum GamePhase {
-    WAITING,
-    COMMIT,
-    REVEAL,
-    END
+    WAITING, // Waiting for players
+    COMMIT, // Waiting for two players to commit
+    REVEAL, // Waiting for two players to reveal
+    END // Game ended (probably unused)
   }
 
   GamePhase public gamePhase;
 
-  uint public reward = 0;
+  uint public reward = 0; // Stores reward in ETH
+
   mapping(address => uint8) public playerChoices;
   mapping(address => bool) public playerCommited;
   mapping(address => bool) public playerRevealed;
@@ -26,14 +27,14 @@ contract RPS {
   uint8 public numPlayers;
 
   CommitReveal public commitReveal;
-
   TimeUnit public timeUnit;
+  uint256 _commitTime; // Time in seconds after which players can withdraw after the commit phase begins
+  uint256 _revealTime; // Time in seconds after which players can withdraw after the reveal phase begins
+
   uint8 public numCommits;
   uint8 public numReveals;
 
-  uint256 _commitTime;
-  uint256 _revealTime;
-
+  // Starts a new game
   function _startGame() private {
     gamePhase = GamePhase.WAITING;
 
@@ -58,6 +59,7 @@ contract RPS {
     numReveals = 0;
   }
 
+  // Refer to _commitTime and _revealTime above
   constructor(uint256 commitTime, uint256 revealTime) {
     _commitTime = commitTime;
     _revealTime = revealTime;
@@ -91,33 +93,44 @@ contract RPS {
 
     numPlayers++;
 
+    // Start the commit phase after two players have joined
     if (numPlayers == 2) {
       gamePhase = GamePhase.COMMIT;
       timeUnit.setStartTime();
     }
   }
 
+  // User commits a choice (rock, paper, scissors, lizard, or spock, in integer form)
+  // The choice is hashed inside commitReveal to prevent front-running
+  // dataHash must be hashed externally (using kekcak256) before being fed to commit()
   function commit(bytes32 dataHash) public {
     require(playerInGame[msg.sender] == true, "Must be in game to commit");
     require(numPlayers == 2, "Requires at least two players in game to commit");
     require(playerCommited[msg.sender] == false, "Already commited");
     require(numCommits < 2, "Too many commits");
 
+    // Can almost never revert
     commitReveal.commit(msg.sender, dataHash);
+
     numCommits++;
     playerCommited[msg.sender] = true;
 
+    // Start the reveal phase after two players have committed
     if (numCommits == 2) {
       gamePhase = GamePhase.REVEAL;
       timeUnit.setStartTime();
     }
   }
 
+  // User reveals the choice they have committed to
+  // A choice is accepted if they the hash matches the committed hash
+  // revealHash is not hashed, but padded with 31 random bytes with the final one being the choice (1 byte)
   function reveal(bytes32 revealHash) public {
     require(playerInGame[msg.sender] == true, "Must be in game to reveal");
     require(playerRevealed[msg.sender] == false, "Already revealed");
     require(numCommits == 2, "Requires two commits to reveal");
 
+    // Reverts if the hash does not match the committed hash
     commitReveal.reveal(msg.sender, revealHash);
 
     uint8 choice = uint8(revealHash[31]);
@@ -126,6 +139,7 @@ contract RPS {
     playerRevealed[msg.sender] = true;
     numReveals++;
 
+    // Pays the winner, ends and restarts the game after both players have revealed their choices
     if (numReveals == 2) {
       gamePhase = GamePhase.END;
       _checkWinnerAndPay();
@@ -133,12 +147,16 @@ contract RPS {
     }
   }
 
+  // Allows players to withdraw mid-game, but under certain conditions
+  // Players can withdraw after the commit and reveal deadlines, with respect to the game phase in which they withdraw
+  // If a player withdraws after the other player has revealed their choice, the remaining player wins
   function withdraw() public {
     require(
       playerInGame[msg.sender] == true,
       "Cannot withdraw if you are not in the game"
     );
 
+    // Deadline check
     if (gamePhase == GamePhase.COMMIT) {
       require(
         timeUnit.elapsedSeconds() >= _commitTime,
@@ -156,8 +174,9 @@ contract RPS {
     playerChoices[msg.sender] = 0;
     numPlayers--;
 
-    address remainingPlayer;
+    address remainingPlayer; // The other person who hasn't withdrawn
 
+    // If the withdrawing player is player0, player1 is the remaining player and vice versa
     if (msg.sender == player0) {
       player0 = address(0);
       remainingPlayer = player1;
@@ -190,21 +209,25 @@ contract RPS {
       account.transfer(1 ether);
     }
 
+    // If there are no players left, the game is reset
     if (numPlayers == 0) {
       _startGame();
     }
   }
 
-  enum GameResult {
+  // Outcomes of the Rock, Paper, Scissors, Lizard, Spock game
+  enum ChoiceOutcomes {
     WIN,
     LOSE,
     TIE
   }
 
-  function _checkWin(
+  // Checks for the outcome of moveA against moveB
+  // Returns WIN if moveA wins, LOSE if moveA loses, and TIE if they tie
+  function _checkOutcome(
     uint8 moveA,
     uint8 moveB
-  ) private pure returns (GameResult) {
+  ) private pure returns (ChoiceOutcomes) {
     if (
       (moveA == 0 && (moveB == 2 || moveB == 3)) || // Rock beats Scissors & Lizard
       (moveA == 1 && (moveB == 0 || moveB == 4)) || // Paper beats Rock & Spock
@@ -212,26 +235,30 @@ contract RPS {
       (moveA == 3 && (moveB == 1 || moveB == 4)) || // Lizard beats Paper & Spock
       (moveA == 4 && (moveB == 0 || moveB == 2)) // Spock beats Rock & Scissors
     ) {
-      return GameResult.WIN;
+      return ChoiceOutcomes.WIN;
     } else if (moveA == moveB) {
-      return GameResult.TIE;
+      return ChoiceOutcomes.TIE;
     } else {
-      return GameResult.LOSE;
+      return ChoiceOutcomes.LOSE;
     }
   }
 
+  // Checks the winner and pays them
   function _checkWinnerAndPay() private {
     uint8 p0Choice = playerChoices[player0];
     uint8 p1Choice = playerChoices[player1];
     address payable account0 = payable(player0);
     address payable account1 = payable(player1);
 
-    GameResult result = _checkWin(p0Choice, p1Choice);
-    if (result == GameResult.WIN) {
+    ChoiceOutcomes result = _checkOutcome(p0Choice, p1Choice);
+    if (result == ChoiceOutcomes.WIN) {
+      // Account 1 wins the reward
       account0.transfer(reward);
-    } else if (result == GameResult.LOSE) {
+    } else if (result == ChoiceOutcomes.LOSE) {
+      // Account 1 wins the reward
       account1.transfer(reward);
     } else {
+      // Tie: split the reward in half
       account0.transfer(reward / 2);
       account1.transfer(reward / 2);
     }
