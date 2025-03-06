@@ -30,8 +30,8 @@ contract RPS {
   uint8 public numCommits;
   uint8 public numReveals;
 
-  uint256 constant _commitTime = 0;
-  uint256 constant _revealTime = 0;
+  uint256 constant _commitTime = 5;
+  uint256 constant _revealTime = 5;
 
   function _startGame() private {
     gamePhase = GamePhase.WAITING;
