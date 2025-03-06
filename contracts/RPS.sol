@@ -252,7 +252,7 @@ contract RPS {
 
     ChoiceOutcomes result = _checkOutcome(p0Choice, p1Choice);
     if (result == ChoiceOutcomes.WIN) {
-      // Account 1 wins the reward
+      // Account 0 wins the reward
       account0.transfer(reward);
     } else if (result == ChoiceOutcomes.LOSE) {
       // Account 1 wins the reward
