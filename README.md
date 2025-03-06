@@ -139,7 +139,7 @@ function commit(address addr, bytes32 dataHash) public {
 By storing the digest and not the raw choice, we effectively prevent cheaters from looking up their opponent's answer as the digest completely conceals the information, thus preventing **front-running**. 
 However, this raises a question: how can we recover the choice if it's concealed? We will answer this in the next section. For now, we will describe the rest of the `commit()` method first.
 
-```
+```solidity
 function commit(bytes32 dataHash) public {
     // ... more code ... //
     numCommits++;
@@ -157,9 +157,9 @@ After a successful commit, we will increment the current number of commits `comm
 Next, if the number of commits is equal to 2, we transition from `COMMIT` to `REVEAL`, the state in which players begin revealing their committed answers, which requires the use of `reveal(...)`.
 
 #### `reveal(bytes32 dataHash)`
+Here we have `reveal(bytes32 dataHash)`. Despite its name, `dataHash` is not hashed, but rather generated from a Python script (or any other script) that creates a string representing a 31-byte hex value. For more details, see [here](#commitbytes32-datahash).
 ```solidity
 // contracts/RPS.sol
-
 // User reveals the choice they have committed to
 // A choice is accepted if they the hash matches the committed hash
 // revealHash is not hashed, but padded with 31 random bytes with the final one being the choice (1 byte)
@@ -167,7 +167,15 @@ function reveal(bytes32 revealHash) public {
     require(playerInGame[msg.sender] == true, "Must be in game to reveal");
     require(playerRevealed[msg.sender] == false, "Already revealed");
     require(numCommits == 2, "Requires two commits to reveal");
-    
+    // ... more code ... //
+}
+```
+
+
+```solidity
+// contracts/RPS.sol
+function reveal(bytes32 revealHash) public {
+    // ... more code ... //
     // Reverts if the hash does not match the committed hash
     commitReveal.reveal(msg.sender, revealHash);
     
@@ -183,9 +191,6 @@ function reveal(bytes32 revealHash) public {
       _checkWinnerAndPay();
       _startGame();
     }
-}
 ```
-
-
 
 
