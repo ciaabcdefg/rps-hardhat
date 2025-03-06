@@ -12,6 +12,12 @@ This is my submission for Centralized and Decentralized Finance class of 2024 (2
 * For grading, you can ignore `/test` along with other files in the root directory.
 
 ## How It Works
+`RPS.sol` depends on two contracts, namely `CommitReveal.sol` and `TimeUnit.sol`.
+```solidity
+import "contracts/CommitReveal.sol";
+import "contracts/TimeUnit.sol";
+```
+
 The game has three states defined by this enum `GamePhase`. We define a variable `gamePhase` to help track the game's state. The detail of each state is shown in the accompanying comments.
 ```solidity
 // contracts/RPS.sol
@@ -19,7 +25,7 @@ enum GamePhase {
     WAITING, // Waiting for players
     COMMIT, // Waiting for two players to commit
     REVEAL, // Waiting for two players to reveal
-  }
+}
 
 GamePhase public gamePhase;
 ```
@@ -31,6 +37,29 @@ Here is a basic representation of the game's states:
        |                         v                             v                          |
        ------------------------- o <-------------------------- o <-------------------------
 ```
+
+We wil proceed to declare more variables, whose names should be self-explainatory or described by the accompanying comments.
+```solidity
+uint public reward = 0; // Stores reward in ETH
+
+  mapping(address => uint8) public playerChoices;
+  mapping(address => bool) public playerCommited;
+  mapping(address => bool) public playerRevealed;
+  mapping(address => bool) public playerInGame;
+
+  address public player0;
+  address public player1;
+  uint8 public numPlayers;
+
+  CommitReveal public commitReveal;
+  TimeUnit public timeUnit;
+  uint256 _commitTime; // Time in seconds after which players can withdraw after the commit phase begins
+  uint256 _revealTime; // Time in seconds after which players can withdraw after the reveal phase begins
+
+  uint8 public numCommits;
+  uint8 public numReveals;
+```
+
 ### `addPlayer()`
 The game starts in the `WAITING` state. During this state, players can call `addPlayer()` to join the game. `addPlayer()`, as shown below, is a payable function, meaning that it accepts ETH payment.
 ```solidity
