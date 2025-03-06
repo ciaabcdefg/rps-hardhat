@@ -337,7 +337,7 @@ function reveal(address addr, bytes32 revealHash) public {
 If the checks pass, we will mark the commit as revealed to prevent it from being revealed again. Next, we will emit `RevealHash(addr, revealHash, random)` with `random` being the hash of the commit blockhash through a modulo of `max`. This part is irrelevant to the main game logic, but it introduces unpredictable randomness that prevents players from predicting outcomes.
 
 Let's hop back to `reveal(...)` in `contracts/RPS.sol`.
-```
+```solidity
 function reveal(address addr, bytes32 revealHash) public {
     // ... more code ... //
     uint8 choice = uint8(revealHash[31]);
