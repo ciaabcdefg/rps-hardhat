@@ -12,7 +12,6 @@ This is my submission for Centralized and Decentralized Finance class of 2024 (2
 * For grading, you can ignore `/test` along with other files in the root directory.
 
 ## How It Works
-### `RPS.sol`
 We will define an enum `GamePhase` and a state `gamePhase` to help track the game's state. The details are shown in the accompanying comments.
 ```solidity
 enum GamePhase {
