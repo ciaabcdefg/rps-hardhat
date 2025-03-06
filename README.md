@@ -437,7 +437,7 @@ Basically, `result` represents the outcome from `player0`'s perspective.
 Therefore, `result == ChoiceOutcomes.WIN` represents `player0`'s victory. If it is a loss, then it is `player1`'s. Otherwise, it is a tie.
 In case of a decisive win or loss, the victor is rewarded 2 ETH, while the loser does not get their 1 ETH stake back. In case of a tie, each player is refunded 1 ETH.
 
-### `RPS::_withdraw()`
+### `RPS::withdraw()`
 This is the final method in the contract, used by the players to withdraw after a certain time has passed. 
 This prevents players from getting their funds locked in the game due to the other player's refusal to make a move, whether to commit or to reveal, thus deadlocking the game.
 
