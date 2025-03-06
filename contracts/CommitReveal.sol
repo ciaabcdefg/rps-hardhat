@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
+// Originally by Austin Griffith (austintgriffith on GitHub), through https://github.com/austintgriffith/commit-reveal/tree/master
+// Modified by Paruj Ratanaworabhan (parujr on GitHub), through https://github.com/parujr/RPS/blob/main/CommitReveal.sol
+// Modified by Ittiwat Chuchoet (ciaabcdefg on GitHub)
 
 pragma solidity >=0.8.2 <0.9.0;
 
@@ -26,31 +29,33 @@ contract CommitReveal {
 
   // ciaabcdefg: Modified the reveal function to accept addr as well
   // addr is used instead of msg.sender (msg.sender refers to the contract address, not the player)
+  // ciaabcdefg: Moved commits[addr].revealed = true; to the bottom to follow the Checks-Effects-Interactions pattern
   function reveal(address addr, bytes32 revealHash) public {
-    //make sure it hasn't been revealed yet and set it to revealed
+    // make sure it hasn't been revealed yet
     require(
       commits[addr].revealed == false,
       "CommitReveal::reveal: Already revealed"
     );
-    commits[addr].revealed = true;
-    //require that they can produce the committed hash
+    // require that they can produce the committed hash
     require(
       getHash(revealHash) == commits[addr].commit,
       "CommitReveal::reveal: Revealed hash does not match commit"
     );
-    //require that the block number is greater than the original block
+    // require that the block number is greater than the original block
     require(
       uint64(block.number) > commits[addr].block,
       "CommitReveal::reveal: Reveal and commit happened on the same block"
     );
-    //require that no more than 250 blocks have passed
+    // require that no more than 250 blocks have passed
     require(
       uint64(block.number) <= commits[addr].block + 250,
       "CommitReveal::reveal: Revealed too late"
     );
-    //get the hash of the block that happened after they committed
+    // set to revealed
+    commits[addr].revealed = true;
+    // get the hash of the block that happened after they committed
     bytes32 blockHash = blockhash(commits[addr].block);
-    //hash that with their reveal that so miner shouldn't know and mod it with some max number you want
+    // hash that with their reveal that so miner shouldn't know and mod it with some max number you want
     uint random = uint(keccak256(abi.encodePacked(blockHash, revealHash))) %
       max;
     emit RevealHash(addr, revealHash, random);

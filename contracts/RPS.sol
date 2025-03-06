@@ -9,8 +9,7 @@ contract RPS {
   enum GamePhase {
     WAITING, // Waiting for players
     COMMIT, // Waiting for two players to commit
-    REVEAL, // Waiting for two players to reveal
-    END // Game ended (probably unused)
+    REVEAL // Waiting for two players to reveal
   }
 
   GamePhase public gamePhase;
@@ -147,7 +146,6 @@ contract RPS {
 
     // Pays the winner, ends and restarts the game after both players have revealed their choices
     if (numReveals == 2) {
-      gamePhase = GamePhase.END;
       _checkWinnerAndPay();
       _startGame();
     }
@@ -174,7 +172,6 @@ contract RPS {
         "Cannot withdraw before reveal deadline"
       );
     }
-    require(gamePhase != GamePhase.END, "Cannot withdraw after game ends");
 
     playerInGame[msg.sender] = false;
     playerChoices[msg.sender] = 0;
