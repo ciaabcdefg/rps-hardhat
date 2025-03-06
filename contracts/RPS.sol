@@ -65,6 +65,13 @@ contract RPS {
       gamePhase == GamePhase.WAITING,
       "Cannot join when the game has started"
     );
+    // require(
+    //   msg.sender == 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4 ||
+    //     msg.sender == 0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2 ||
+    //     msg.sender == 0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db ||
+    //     msg.sender == 0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB,
+    //   "You are not allowed to play this game"
+    // );
     require(msg.value == 1 ether, "Provide 1 ETH to play the game");
 
     reward += msg.value;
